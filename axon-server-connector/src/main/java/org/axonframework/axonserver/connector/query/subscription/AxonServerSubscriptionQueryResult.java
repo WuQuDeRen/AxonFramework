@@ -129,48 +129,29 @@ public class AxonServerSubscriptionQueryResult implements Supplier<SubscriptionQ
                 updateMessageFluxSink.next(response.getUpdate());
                 break;
             case COMPLETE:
-                requestObserver.onCompleted();
-                complete();
+                onCompleted();
                 break;
             case COMPLETE_EXCEPTIONALLY:
-                requestObserver.onCompleted();
-                QueryUpdateCompleteExceptionally exceptionally = response.getCompleteExceptionally();
-                completeExceptionally(
-                        ErrorCode.getFromCode(exceptionally.getErrorCode()).convert(exceptionally.getErrorMessage())
-                );
+                QueryUpdateCompleteExceptionally e = response.getCompleteExceptionally();
+                onError(ErrorCode.getFromCode(e.getErrorCode()).convert(e.getErrorMessage()));
                 break;
         }
     }
 
     @Override
     public void onError(Throwable t) {
-        completeExceptionally(t);
-    }
-
-    private void completeExceptionally(Throwable t) {
         onDispose.run();
-        updateError(t);
+        updateMessageFluxSink.error(t);
         initialResultError(t);
-    }
-
-    private void updateError(Throwable t) {
-        try {
-            updateMessageFluxSink.error(t);
-        } catch (Exception e) {
-            updateMessageFluxSink.complete();
-            logger.warn("Problem signaling updates error.", e);
-        }
+        requestObserver.onCompleted();
     }
 
     @Override
     public void onCompleted() {
-        complete();
-    }
-
-    private void complete() {
         onDispose.run();
         updateMessageFluxSink.complete();
         initialResultError(new IllegalStateException("Subscription Completed"));
+        requestObserver.onCompleted();
     }
 
     private void initialResultError(Throwable t) {
